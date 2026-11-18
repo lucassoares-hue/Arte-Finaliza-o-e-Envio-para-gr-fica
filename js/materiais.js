@@ -15,6 +15,10 @@ const Materiais = {
     "LIVRO-2": Object.freeze(["GEOGRAFIA 2", "HISTORIA 2", "SOCIOLOGIA", "FILOSOFIA", "REDACAO", "MATEMATICA 2", "MATEMATICA 3", "FISICA 2", "QUIMICA 2", "BIOLOGIA 2"])
   }),
 
+  BOOK_LUDUS: Object.freeze({
+    "GEOGRAFIA+HISTORIA": Object.freeze(["GEOGRAFIA", "HISTORIA"])
+  }),
+
   MANUAL_LUDUS: Object.freeze({
     "GEOGRAFIA+HISTORIA": Object.freeze(["GEOGRAFIA", "HISTORIA"]),
     PORTUGUES: Object.freeze(["PORTUGUES"]),
@@ -126,6 +130,15 @@ const Materiais = {
     const comum = { tipoMaterial: tipo, categoria: grupo === "ANUAL" ? "ANUAL" : "MODULAR", modulo: grupo, modulosEsperados: modulos, exigeSufixo: true };
 
     if (tipo === "BOOK") {
+      const agrupado = Object.entries(this.BOOK_LUDUS).find(([, lista]) => lista.includes(frente.disciplina));
+      if (agrupado) {
+        return this.definir(base, {
+          ...comum,
+          composicaoChave: agrupado[0],
+          nome: `BOOK ${grupo} · ${agrupado[1].map((d) => this.titulo(d)).join(" + ")}`,
+          disciplinasEsperadas: agrupado[1]
+        });
+      }
       return this.definir(base, {
         ...comum,
         composicaoChave: this.slug(frente.disciplina),

@@ -1,0 +1,435 @@
+@media (max-width: 1280px) {
+  .indicadores {
+    grid-template-columns: 1fr;
+  }
+
+  .kpis__grupo--qualidade .kpis__grade {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 340px));
+  }
+}
+
+@media (max-width: 1100px) {
+  .graficos {
+    grid-template-columns: 1fr;
+  }
+
+  .filtros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filtros__limpar {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .entregas-kpis,
+  .etapas-resumo__grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qualidade__lista {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bento__hero,
+  .bento__stats {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .bento__meio {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-md);
+  }
+
+  .main {
+    margin-left: 0;
+  }
+
+  .sidebar__recolher {
+    display: none;
+  }
+
+  .topbar__toggle {
+    display: inline-flex;
+  }
+
+  .topbar__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .topbar {
+    padding: 0 24px;
+  }
+
+  .content {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .topbar__title {
+    font-size: 17px;
+  }
+
+  .topbar__status-text {
+    display: none;
+  }
+
+  .topbar__status {
+    padding: 8px;
+  }
+
+  .topbar__refresh-text {
+    display: none;
+  }
+
+  .topbar__filtros-contagem {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+  }
+
+  .gaveta-filtros {
+    width: 100vw;
+    border-left: none;
+  }
+
+  .analise {
+    width: calc(100% - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 16px;
+  }
+
+  .analise__cabecalho {
+    padding: 14px 16px 12px;
+  }
+
+  .analise__titulo {
+    font-size: 18px;
+  }
+
+  .analise__corpo {
+    padding: 14px 12px 20px;
+  }
+
+  .bento {
+    gap: 10px;
+  }
+
+  .bento__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .bento__card {
+    padding: 14px;
+  }
+
+  .bento__stat {
+    grid-column: auto;
+  }
+
+  .bento__stat-valor {
+    font-size: 24px;
+  }
+
+  .bento__hero-corpo {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .anel {
+    width: 116px;
+    height: 116px;
+    align-self: center;
+  }
+
+  .analise-pilha__legenda {
+    grid-template-columns: 1fr;
+  }
+
+  .analise-barra {
+    grid-template-columns: minmax(72px, 32%) minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 5px 4px;
+  }
+
+  .bento-tempo {
+    gap: 4px;
+  }
+
+  .analise-ferramentas__campo {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .analise-tabela__paginas {
+    justify-content: space-between;
+  }
+
+  .gaveta-filtros__cabecalho,
+  .gaveta-filtros__rodape {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .gaveta-filtros__corpo {
+    padding: 4px 16px 16px;
+  }
+
+
+  .topbar__refresh {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .topbar__actions {
+    gap: 8px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  .section__title {
+    font-size: 20px;
+  }
+
+  .kpis__grade,
+  .kpis__grupo--qualidade .kpis__grade {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi__valor {
+    font-size: 28px;
+  }
+
+  .bloco,
+  .painel {
+    padding: 16px;
+  }
+
+  .fluxo__lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .etapa {
+    padding: 12px;
+  }
+
+  .barras__linha,
+  .barras__eixo {
+    grid-template-columns: minmax(96px, 120px) 1fr 32px;
+    gap: 8px;
+  }
+
+  .barras__rotulo {
+    font-size: 12px;
+  }
+
+  .dica::after {
+    width: 200px;
+  }
+
+  .filtros,
+  .entregas-kpis,
+  .etapas-resumo__grade {
+    grid-template-columns: 1fr;
+  }
+
+  .filtros__limpar {
+    justify-self: stretch;
+  }
+
+  .qualidade__lista,
+  .detalhe__campos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tabela--entregas th:nth-child(3),
+  .tabela--entregas td:nth-child(3) {
+    position: static;
+    box-shadow: none;
+  }
+
+  .segmentos {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+  }
+
+  .projetos__linha {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "marca nome valor"
+      "trilho trilho trilho";
+    gap: 10px 12px;
+    padding: 12px 4px;
+  }
+
+  .projetos__marca {
+    grid-area: marca;
+    width: 44px;
+    height: 44px;
+  }
+
+  .projetos__nome { grid-area: nome; }
+
+  .projetos__valor {
+    grid-area: valor;
+  }
+
+  .projetos__valor strong {
+    font-size: 16px;
+  }
+
+  .projetos__trilho {
+    grid-area: trilho;
+    height: 16px;
+  }
+
+  .projetos__linha::after {
+    right: 4px;
+    max-width: 240px;
+  }
+
+  .segmento {
+    justify-content: space-between;
+  }
+
+  .detalhe,
+  .lista-indicador {
+    width: calc(100% - 16px);
+    max-height: calc(100vh - 16px);
+  }
+
+  .detalhe__cabecalho,
+  .detalhe__corpo {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .empty-state {
+    padding: 40px 16px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .bento-projeto--botao {
+    min-height: 76px;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 12px;
+  }
+
+  .bento-projeto--botao .bento-projeto__marca {
+    width: 44px;
+    height: 44px;
+  }
+
+  .bento-projeto--botao .bento-projeto__trilho {
+    height: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .analise-tabela--materiais th:nth-child(1),
+  .analise-tabela--materiais td:nth-child(1) { width: 52px; }
+
+  .analise-tabela--materiais th:nth-child(2),
+  .analise-tabela--materiais td:nth-child(2) { width: 70px; white-space: nowrap; }
+
+  .tabela.analise-tabela--materiais th,
+  .tabela.analise-tabela--materiais td { padding-left: 8px; padding-right: 8px; }
+}
+
+@media (max-width: 640px) {
+  .detalhe--material .detalhe__cabecalho,
+  .detalhe--material .detalhe__corpo {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .detalhe-checklist__contagem {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 860px) {
+  .detalhe--material .detalhe__campos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detalhe--material .detalhe__campos div:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 860px) {
+  .detalhe--material .detalhe__campos--quatro div:last-child {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .legenda-status { display: none; }
+
+  .tabela.tabela--entregas {
+    min-width: 0;
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .tabela--entregas col.col-etapa,
+  .tabela--entregas col.col-progresso,
+  .tabela--entregas th:nth-child(n+4),
+  .tabela--entregas td:nth-child(n+4) { display: none; }
+
+  .tabela--entregas col.col-colecao { width: 52px; }
+  .tabela--entregas col.col-ano { width: 52px; }
+  .tabela--entregas col.col-material { width: auto; }
+
+  .tabela.tabela--entregas th,
+  .tabela.tabela--entregas td {
+    padding: 10px 6px;
+    vertical-align: middle;
+  }
+
+  .tabela--entregas th:nth-child(-n+2),
+  .tabela--entregas td:nth-child(-n+2) { text-align: center; }
+
+  .tabela--entregas .tabela-colecao .tabela-colecao__marca { width: 34px; height: 34px; }
+
+  .tabela--entregas td:nth-child(3) { overflow-wrap: anywhere; }
+
+  .tabela--entregas .link-material {
+    white-space: normal;
+    text-align: left;
+    line-height: 1.35;
+  }
+}

@@ -139,6 +139,7 @@ const CiclosEntrega = {
 
   resumoEtapas(materiais) {
     const confirmados = materiais.filter((b) => !b.provisorio);
+    const pendencias = Pendencias.resumo(EntregasView.proc, confirmados);
     const percentual = (concluidos, total) => (total ? (concluidos / total) * 100 : null);
     const checklist = confirmados.reduce((t, b) => ({
       total: t.total + b.checklist.total,
@@ -155,6 +156,7 @@ const CiclosEntrega = {
         unidade: "materiais",
         total: confirmados.length,
         emAndamento: status.filter((s) => s === STATUS.EM_ANDAMENTO).length,
+        pendentes: pendencias.etapas[etapa.id],
         concluidos,
         percentual: percentual(concluidos, confirmados.length),
         analise: etapa.id
@@ -162,12 +164,12 @@ const CiclosEntrega = {
     });
     const solicitadas = confirmados.filter((b) => b.etapas.bonecaSolicitada.status === STATUS.CONCLUIDO).length;
     const recebidas = confirmados.filter((b) => b.etapas.bonecaRecebida.status === STATUS.CONCLUIDO).length;
-    const boneca = { id: "boneca", nome: "Boneca", unidade: "materiais", total: confirmados.length, solicitadas, emAndamento: 0, concluidos: recebidas, percentual: percentual(recebidas, confirmados.length), analise: "boneca", linhas: "boneca" };
+    const boneca = { id: "boneca", nome: "Boneca", unidade: "materiais", total: confirmados.length, solicitadas, emAndamento: 0, pendentes: pendencias.etapas.bonecaSolicitada + pendencias.etapas.bonecaRecebida, concluidos: recebidas, percentual: percentual(recebidas, confirmados.length), analise: "boneca", linhas: "boneca" };
     const posicao = etapas.findIndex((e) => e.id === "bonecaSolicitada");
     const unificadas = etapas.filter((e) => e.id !== "bonecaSolicitada" && e.id !== "bonecaRecebida");
     unificadas.splice(posicao, 0, boneca);
     return [
-      { id: ETAPA_CHECKLIST.id, nome: ETAPA_CHECKLIST.nome, unidade: "frentes", ...checklist, percentual: percentual(checklist.concluidos, checklist.total), analise: "checklist" },
+      { id: ETAPA_CHECKLIST.id, nome: ETAPA_CHECKLIST.nome, unidade: "frentes", ...checklist, pendentes: pendencias.checklist, pendentesIndisponivel: !pendencias.disponivel, percentual: percentual(checklist.concluidos, checklist.total), analise: "checklist" },
       ...unificadas
     ];
   },
@@ -198,6 +200,8 @@ const EntregasView = {
   estado: { carregando: false, erro: null },
   filtros: { colecao: [], ano: [], tipo: [], situacao: [] },
   filtrosEdicao: { colecao: [], ano: [], tipo: [], situacao: [] },
+  filtrosVisao: { colecao: [], entrega: [], ano: [], modulo: [], tipo: [] },
+  escopo: "entregas",
   registrosPorMaterial: new Map(),
 
   init() {
@@ -234,6 +238,11 @@ const EntregasView = {
         this.renderizarIndicador();
         const ativo = Utils.qs(`[data-recorte="${recorte.dataset.recorte}"]`, this.listaDialogo);
         if (ativo) ativo.focus();
+        return;
+      }
+      const salvar = evento.target.closest("[data-salvar-enviados]");
+      if (salvar) {
+        this.salvarEnviados(salvar);
         return;
       }
       if (evento.target === this.listaDialogo || evento.target.closest("[data-fechar-lista]")) this.fecharDialogo(this.listaDialogo);
@@ -340,8 +349,32 @@ const EntregasView = {
     Object.freeze({ id: "situacao", titulo: "Situação" })
   ]),
 
-  filtrosVazios() {
-    return { colecao: [], ano: [], tipo: [], situacao: [] };
+  GRUPOS_FILTRO_VISAO: Object.freeze([
+    Object.freeze({ id: "colecao", titulo: "Coleção" }),
+    Object.freeze({ id: "entrega", titulo: "Entrega" }),
+    Object.freeze({ id: "ano", titulo: "Ano escolar" }),
+    Object.freeze({ id: "modulo", titulo: "Módulo" }),
+    Object.freeze({ id: "tipo", titulo: "Tipo de material" })
+  ]),
+
+  filtrosVazios(escopo = "entregas") {
+    return escopo === "visao" ? { colecao: [], entrega: [], ano: [], modulo: [], tipo: [] } : { colecao: [], ano: [], tipo: [], situacao: [] };
+  },
+
+  escopoDe(filtros) {
+    return "entrega" in filtros ? "visao" : "entregas";
+  },
+
+  gruposPainel() {
+    return this.escopo === "visao" ? this.GRUPOS_FILTRO_VISAO : this.GRUPOS_FILTRO;
+  },
+
+  filtrosAtivos() {
+    return this.escopo === "visao" ? this.filtrosVisao : this.filtros;
+  },
+
+  moduloCurto(modulo) {
+    return Materiais.canonModulo(modulo).replace(/^(BOOK|MANUAL|CMA)-/, "");
   },
 
   copiarFiltros(filtros) {
@@ -352,16 +385,19 @@ const EntregasView = {
     if (grupo === "colecao") return Materiais.semAcento(material.colecao);
     if (grupo === "ano") return material.ano;
     if (grupo === "tipo") return material.tipoMaterial;
+    if (grupo === "modulo") return this.moduloCurto(material.modulo);
+    if (grupo === "entrega") { const e = CiclosEntrega.classificar(material).entrega; return e ? String(e) : ""; }
     return material.situacao;
   },
 
   atendeFiltros(material, filtros, ignorar) {
-    return this.GRUPOS_FILTRO.every(({ id }) =>
+    return Object.keys(filtros).every((id) =>
       id === ignorar || !filtros[id].length || filtros[id].includes(this.valorDoGrupo(id, material)));
   },
 
-  baseFiltros() {
+  baseFiltros(escopo = "entregas") {
     if (!this.proc) return [];
+    if (escopo === "visao") return this.proc.books.filter((b) => !b.provisorio);
     return CiclosEntrega.selecionar(this.proc, this.entrega).materiais.filter((b) => !b.provisorio);
   },
 
@@ -372,6 +408,8 @@ const EntregasView = {
       colecao: CiclosEntrega.COLECOES_PROJETO.map((c) => c.chave).filter((c) => presentes.includes(c)),
       ano: unicos((b) => b.ano).sort((a, b) => Number(Materiais.canonAno(a)) - Number(Materiais.canonAno(b))),
       tipo: unicos((b) => b.tipoMaterial).sort(),
+      entrega: unicos((b) => this.valorDoGrupo("entrega", b)).sort(),
+      modulo: unicos((b) => this.moduloCurto(b.modulo)).sort((a, b) => this.ordemModulo(a) - this.ordemModulo(b) || a.localeCompare(b)),
       situacao: Object.values(SITUACAO_BOOK)
     };
   },
@@ -379,12 +417,19 @@ const EntregasView = {
   rotuloOpcao(grupo, valor) {
     if (grupo === "situacao") return SITUACAO_ROTULO[valor];
     if (grupo === "ano") return `${valor} ano`;
+    if (grupo === "entrega") return CiclosEntrega.nomeCiclo(valor);
     return valor;
   },
 
+  ordemModulo(modulo) {
+    const ordem = ["M1", "M2", "M3", "M4", "M1/M2", "M3/M4", "ANUAL"];
+    const i = ordem.indexOf(modulo);
+    return i < 0 ? ordem.length : i;
+  },
+
   validarFiltros(filtros) {
-    const opcoes = this.opcoesFiltros(this.baseFiltros());
-    this.GRUPOS_FILTRO.forEach(({ id }) => {
+    const opcoes = this.opcoesFiltros(this.baseFiltros(this.escopoDe(filtros)));
+    Object.keys(filtros).forEach((id) => {
       filtros[id] = filtros[id].filter((v) => opcoes[id].includes(v));
     });
     return filtros;
@@ -392,7 +437,7 @@ const EntregasView = {
 
   contarFacetas(base, filtros) {
     const contagem = {};
-    this.GRUPOS_FILTRO.forEach(({ id }) => {
+    Object.keys(filtros).forEach((id) => {
       contagem[id] = {};
       base.filter((b) => this.atendeFiltros(b, filtros, id)).forEach((b) => {
         const v = this.valorDoGrupo(id, b);
@@ -407,7 +452,7 @@ const EntregasView = {
   },
 
   mesmosFiltros(a, b) {
-    return this.GRUPOS_FILTRO.every(({ id }) => a[id].length === b[id].length && a[id].every((v) => b[id].includes(v)));
+    return Object.keys(a).every((id) => b[id] && a[id].length === b[id].length && a[id].every((v) => b[id].includes(v)));
   },
 
   configurarPainelFiltros() {
@@ -435,7 +480,7 @@ const EntregasView = {
 
     Utils.qs("#btnAplicarFiltros").addEventListener("click", () => this.aplicarFiltrosEdicao());
     this.botaoLimparFiltros.addEventListener("click", () => {
-      this.filtrosEdicao = this.filtrosVazios();
+      this.filtrosEdicao = this.filtrosVazios(this.escopo);
       Utils.qsa("input[data-grupo]", this.painelFiltrosCorpo).forEach((c) => { c.checked = false; });
       this.atualizarPreviaFiltros();
       const primeiro = Utils.qs("input[data-grupo]", this.painelFiltrosCorpo);
@@ -469,7 +514,7 @@ const EntregasView = {
 
   abrirPainelFiltros() {
     if (this.painelFiltros.open) return;
-    this.filtrosEdicao = this.copiarFiltros(this.validarFiltros(this.filtros));
+    this.filtrosEdicao = this.copiarFiltros(this.validarFiltros(this.filtrosAtivos()));
     this.renderizarPainelFiltros();
     this.abrirDialogo(this.painelFiltros);
     this.botaoFiltros.setAttribute("aria-expanded", "true");
@@ -479,11 +524,19 @@ const EntregasView = {
 
   fecharPainelFiltros() {
     if (!this.painelFiltros || !this.painelFiltros.open) return;
-    this.filtrosEdicao = this.copiarFiltros(this.filtros);
+    this.filtrosEdicao = this.copiarFiltros(this.filtrosAtivos());
     this.fecharDialogo(this.painelFiltros);
   },
 
   aplicarFiltrosEdicao() {
+    if (this.escopo === "visao") {
+      this.filtrosVisao = this.validarFiltros(this.copiarFiltros(this.filtrosEdicao));
+      Filtros.definir("visao", this.copiarFiltros(this.filtrosVisao));
+      this.atualizarIndicadorFiltros();
+      App.renderizarVisao();
+      this.fecharPainelFiltros();
+      return;
+    }
     this.filtros = this.validarFiltros(this.copiarFiltros(this.filtrosEdicao));
     Filtros.definir("entregas", this.copiarFiltros(this.filtros));
     this.atualizarIndicadorFiltros();
@@ -513,23 +566,61 @@ const EntregasView = {
     this.aplicarFiltrosGlobais(this.filtros.colecao.length ? "[data-remover-colecao]" : null);
   },
 
-  exibirAreaFiltros(visivel) {
+  definirEscopo(secao) {
     if (!this.areaFiltros) return;
-    if (!visivel) this.fecharPainelFiltros();
-    this.areaFiltros.hidden = !visivel;
+    CentralPendencias.fechar();
+    const escopo = secao === "visao-geral" ? "visao" : "entregas";
+    if (escopo !== this.escopo || (secao !== "entregas" && secao !== "visao-geral")) this.fecharPainelFiltros();
+    this.escopo = escopo;
+    this.filtrosEdicao = this.copiarFiltros(this.filtrosAtivos());
+    this.areaFiltros.hidden = secao !== "entregas" && secao !== "visao-geral";
+    CentralPendencias.exibirBotao(!this.areaFiltros.hidden);
+    this.atualizarIndicadorFiltros();
+  },
+
+  procVisao(proc) {
+    if (!proc) return proc;
+    const anterior = this.proc;
+    this.proc = proc;
+    const f = this.validarFiltros(this.filtrosVisao);
+    this.proc = anterior;
+    if (!this.totalSelecionado(f)) return proc;
+    const chave = JSON.stringify(f);
+    if (this.cacheVisao && this.cacheVisao.proc === proc && this.cacheVisao.chave === chave) return this.cacheVisao.resultado;
+    const books = proc.books.filter((b) => this.atendeFiltros(b, f));
+    const ids = new Set(books.map((b) => b.id));
+    const bruto = (r) =>
+      (!f.colecao.length || f.colecao.includes(Materiais.semAcento(r.colecao))) &&
+      (!f.ano.length || f.ano.includes(r.ano)) &&
+      (!f.tipo.length || f.tipo.includes(this.tipoBruto(r))) &&
+      (!f.modulo.length || f.modulo.includes(this.moduloCurto(r.modulo))) &&
+      (!f.entrega.length || f.entrega.includes(String(CiclosEntrega.classificarModulo(r.colecao, r.modulo).entrega || "")));
+    const checklists = proc.checklists.filter((c) => (c.materialId ? ids.has(c.materialId) : bruto(c)));
+    const idsChecklist = new Set(checklists.map((c) => c.id));
+    const resultado = {
+      ...proc,
+      books,
+      materiais: books,
+      registros: proc.registros.filter((r) => idsChecklist.has(r.id)),
+      checklists,
+      naoClassificados: proc.naoClassificados.filter(bruto),
+      indicadores: { checklist: IndicadoresCalculo.checklist(checklists), books: IndicadoresCalculo.books(books) }
+    };
+    this.cacheVisao = { proc, chave, resultado };
+    return resultado;
   },
 
   renderizarPainelFiltros() {
     if (!this.painelFiltrosCorpo) return;
-    Utils.qs("#painelFiltrosEscopo").textContent = CiclosEntrega.nomeCiclo(this.entrega);
+    Utils.qs("#painelFiltrosEscopo").textContent = this.escopo === "visao" ? "Visão Geral" : CiclosEntrega.nomeCiclo(this.entrega);
     if (!this.proc) {
       this.painelFiltrosCorpo.innerHTML = '<p class="gaveta-filtros__vazio">Os filtros ficam disponíveis após o carregamento dos dados.</p>';
       this.resumoFiltros.textContent = "";
       this.botaoLimparFiltros.disabled = true;
       return;
     }
-    const opcoes = this.opcoesFiltros(this.baseFiltros());
-    this.painelFiltrosCorpo.innerHTML = this.GRUPOS_FILTRO.map(({ id, titulo }) => `
+    const opcoes = this.opcoesFiltros(this.baseFiltros(this.escopo));
+    this.painelFiltrosCorpo.innerHTML = this.gruposPainel().map(({ id, titulo }) => `
       <fieldset class="gaveta-filtros__grupo">
         <legend class="gaveta-filtros__legenda">${this.e(titulo)}</legend>
         <div class="gaveta-filtros__opcoes">
@@ -538,7 +629,7 @@ const EntregasView = {
               <input type="checkbox" data-grupo="${id}" value="${this.e(valor)}"${this.filtrosEdicao[id].includes(valor) ? " checked" : ""}>
               <span class="opcao-filtro__rotulo">${this.e(this.rotuloOpcao(id, valor))}</span>
               <span class="opcao-filtro__contagem" data-contagem="${id}|${this.e(valor)}">0</span>
-            </label>`).join("") : '<p class="gaveta-filtros__vazio">Sem opções neste entregável.</p>'}
+            </label>`).join("") : `<p class="gaveta-filtros__vazio">${this.escopo === "visao" ? "Sem opções disponíveis." : "Sem opções neste entregável."}</p>`}
         </div>
       </fieldset>`).join("");
     this.atualizarPreviaFiltros();
@@ -546,7 +637,7 @@ const EntregasView = {
 
   atualizarPreviaFiltros() {
     if (!this.proc || !this.painelFiltrosCorpo) return;
-    const base = this.baseFiltros();
+    const base = this.baseFiltros(this.escopo);
     const contagem = this.contarFacetas(base, this.filtrosEdicao);
     Utils.qsa("[data-contagem]", this.painelFiltrosCorpo).forEach((el) => {
       const [grupo, valor] = el.dataset.contagem.split("|");
@@ -555,14 +646,14 @@ const EntregasView = {
       el.closest(".opcao-filtro").classList.toggle("is-zerada", n === 0);
     });
     const previa = base.filter((b) => this.atendeFiltros(b, this.filtrosEdicao)).length;
-    const pendente = !this.mesmosFiltros(this.filtrosEdicao, this.filtros);
+    const pendente = !this.mesmosFiltros(this.filtrosEdicao, this.filtrosAtivos());
     this.resumoFiltros.innerHTML = `<strong>${this.n(previa)}</strong> de ${this.n(base.length)} materiais com os filtros ${pendente ? "selecionados" : "aplicados"}${pendente ? '<span class="gaveta-filtros__pendente">Prévia · clique em Aplicar filtros</span>' : ""}`;
     this.botaoLimparFiltros.disabled = this.totalSelecionado(this.filtrosEdicao) === 0;
   },
 
   atualizarIndicadorFiltros() {
     if (!this.botaoFiltros) return;
-    const ativos = this.totalSelecionado(this.filtros);
+    const ativos = this.totalSelecionado(this.filtrosAtivos());
     this.contagemFiltros.textContent = ativos ? String(ativos) : "";
     this.contagemFiltros.hidden = !ativos;
     this.botaoFiltros.classList.toggle("is-ativo", ativos > 0);
@@ -658,27 +749,30 @@ const EntregasView = {
   },
 
   ICONES_LINHA: Object.freeze({
-    total: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>',
-    andamento: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-    concluido: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>',
-    solicitada: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3 10 14"/><path d="m21 3-7 18-4-7-7-4z"/></svg>'
+    total: '<img class="etapa-card__imagem" src="assets/total.png" alt="" width="20" height="20" decoding="async">',
+    pendente: '<img class="etapa-card__imagem" src="assets/pendentes.png" alt="" width="20" height="20" decoding="async">',
+    andamento: '<img class="etapa-card__imagem" src="assets/em%20processo.png" alt="" width="20" height="20" decoding="async">',
+    concluido: '<img class="etapa-card__imagem" src="assets/finalizadas.png" alt="" width="20" height="20" decoding="async">',
+    solicitada: '<img class="etapa-card__imagem" src="assets/solicitado.png" alt="" width="20" height="20" decoding="async">',
+    recebida: '<img class="etapa-card__imagem" src="assets/recebido.png" alt="" width="20" height="20" decoding="async">'
   }),
 
   cardEtapa(etapa) {
     const pct = CiclosEntrega.formatarTaxa(etapa.percentual);
     const largura = etapa.percentual === null ? 0 : Math.min(100, Math.max(0, etapa.percentual));
     const interativo = etapa.analise
-      ? ` etapa-card--interativo" role="button" tabindex="0" aria-haspopup="dialog" data-analise="${etapa.analise}" aria-label="${this.e(etapa.linhas === "boneca" ? `${etapa.nome}: ${pct} recebidas. ${etapa.concluidos} recebidas e ${etapa.solicitadas} solicitadas de ${etapa.total} materiais. Abrir análise` : `${etapa.nome}: ${pct}. ${etapa.concluidos} concluídos de ${etapa.total}. Abrir análise`)}`
+      ? ` etapa-card--interativo" role="button" tabindex="0" aria-haspopup="dialog" data-analise="${etapa.analise}" aria-label="${this.e(etapa.linhas === "boneca" ? `${etapa.nome}: ${pct} recebidas. ${etapa.concluidos} recebidas e ${etapa.solicitadas} solicitadas de ${etapa.total} materiais. Abrir análise` : `${etapa.nome}: ${pct}. ${etapa.concluidos} concluídos de ${etapa.total}${etapa.pendentes === null || etapa.pendentes === undefined ? "" : `, ${etapa.pendentes} pendentes`}. Abrir análise`)}`
       : "";
     const marcador = etapa.analise
       ? '<span class="kpi__abrir" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></span>'
       : "";
-    const linha = (classe, icone, rotulo, valor) => `
-      <li class="etapa-card__linha etapa-card__linha--${classe}">
+    const linha = (classe, icone, rotulo, valor, dica) => `
+      <li class="etapa-card__linha etapa-card__linha--${classe}"${dica ? ` title="${this.e(dica)}"` : ""}>
         <span class="etapa-card__icone">${icone}</span>
         <span class="etapa-card__rotulo">${rotulo}</span>
-        <strong class="etapa-card__valor">${this.n(valor)}</strong>
+        <strong class="etapa-card__valor">${valor === null ? "—" : this.n(valor)}</strong>
       </li>`;
+    const pendentes = etapa.pendentes === undefined ? "" : linha("pendente", this.ICONES_LINHA.pendente, "Pendentes", etapa.pendentes, etapa.pendentesIndisponivel ? "Indisponível: a API não informou statusMaterial (coluna Y)" : "Atividades liberadas para execução e ainda não iniciadas");
     return `
       <article class="etapa-card${interativo}">
         <header class="etapa-card__topo">
@@ -692,8 +786,9 @@ const EntregasView = {
         <div class="etapa-card__barra" role="progressbar" aria-label="Conclusão de ${this.e(etapa.nome)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(largura)}"><span style="width:${largura}%"></span></div>
         <ul class="etapa-card__linhas">
           ${linha("total", this.ICONES_LINHA.total, etapa.linhas === "boneca" ? "Total de materiais" : "Total", etapa.total)}
+          ${pendentes}
           ${etapa.linhas === "boneca" ? linha("solicitadas", this.ICONES_LINHA.solicitada, "Solicitadas", etapa.solicitadas) : etapa.exibirAndamento === false ? "" : linha("andamento", this.ICONES_LINHA.andamento, "Em andamento", etapa.emAndamento)}
-          ${linha("concluido", this.ICONES_LINHA.concluido, etapa.linhas === "boneca" ? "Recebidas" : "Concluídos", etapa.concluidos)}
+          ${linha("concluido", etapa.linhas === "boneca" ? this.ICONES_LINHA.recebida : this.ICONES_LINHA.concluido, etapa.linhas === "boneca" ? "Recebidas" : "Concluídos", etapa.concluidos)}
         </ul>
       </article>`;
   },
@@ -1333,7 +1428,7 @@ const EntregasView = {
     },
     grafica: {
       titulo: "Livros enviados à gráfica — Detalhamento",
-      descricao: "Materiais com envio confirmado pela coluna T (dataEnvioGrafica). O envio à gráfica não representa a conclusão integral: separatas e gabaritos continuam obrigatórios.",
+      descricao: "",
       etapa: "grafica",
       recortes: null
     }
@@ -1342,7 +1437,8 @@ const EntregasView = {
   materiaisDoIndicador(tipo) {
     const def = this.INDICADORES_DETALHE[tipo];
     const atende = (b) => b.etapas[def.etapa].status === STATUS.CONCLUIDO;
-    const lista = this.ordenar((this.conjuntoAtual || []).filter(atende));
+    const base = this.listaConsolidada ? Analises.contexto().materiais : (this.conjuntoAtual || []);
+    const lista = this.ordenar(base.filter(atende));
     return {
       confirmados: lista.filter((b) => !b.provisorio),
       provisorios: lista.filter((b) => b.provisorio)
@@ -1352,6 +1448,7 @@ const EntregasView = {
   abrirIndicador(tipo, origem) {
     if (!this.INDICADORES_DETALHE[tipo] || !this.proc) return;
     this.origemLista = origem;
+    this.listaConsolidada = Boolean(Analises.consolidado && Analises.aberta());
     this.indicadorAtivo = { tipo, recorte: "todas" };
     this.renderizarIndicador();
     this.abrirDialogo(this.listaDialogo);
@@ -1363,8 +1460,17 @@ const EntregasView = {
     return this.formatarValores(this.valoresUnicos(this.registrosPorMaterial.get(b.id) || [], campo));
   },
 
+  textoValores(b, campo) {
+    const valores = this.valoresUnicos(this.registrosPorMaterial.get(b.id) || [], campo);
+    if (!valores.length) return "—";
+    return valores.length === 1 ? String(valores[0]) : `Divergente: ${valores.join("; ")}`;
+  },
+
   linhaIndicador(b, tipo) {
     const material = `<button type="button" class="link-material" data-material="${this.e(b.id)}">${this.e(b.nome)}</button>`;
+    if (tipo === "grafica") {
+      return `<tr><td data-rotulo="Coleção">${this.e(b.colecao)}</td><td data-rotulo="Ano">${this.e(b.ano)}</td><td class="tabela__material" data-rotulo="Material">${material}</td><td class="tabela-enviados__data" data-rotulo="Data de envio à gráfica">${this.valorEtapa(b, "dataEnvioGrafica")}</td><td data-rotulo="Responsável pelo envio">${this.valorEtapa(b, "envioGrafica")}</td></tr>`;
+    }
     const inicio = `<td>${this.e(b.colecao)}</td><td>${this.e(b.ano)}</td><td class="tabela__material">${material}</td><td>${this.e(b.modulo)}</td>`;
     if (tipo === "bonecas") {
       const recebida = b.etapas.bonecaRecebida.status;
@@ -1375,24 +1481,67 @@ const EntregasView = {
           : '<span class="chip chip--nao_iniciado">Recebimento não registrado</span>';
       return `<tr>${inicio}<td>${this.valorEtapa(b, "dataEnvioBoneca")}</td><td>${this.valorEtapa(b, "enviadoBoneca")}</td><td>${situacao}</td><td>${this.valorEtapa(b, "chegadaBoneca")}</td></tr>`;
     }
-    return `<tr>${inicio}<td>${this.valorEtapa(b, "dataEnvioGrafica")}</td><td>${this.valorEtapa(b, "envioGrafica")}</td><td>${this.chipSituacao(b.situacao)}</td></tr>`;
+    return "";
   },
 
   tabelaIndicador(lista, tipo, rotulo, vazio) {
     const colunas = tipo === "bonecas"
       ? ["Coleção", "Ano", "Material", "Módulo", "Data de solicitação", "Responsável", "Situação da boneca", "Data de recebimento"]
-      : ["Coleção", "Ano", "Material", "Módulo", "Data de envio à gráfica", "Responsável pelo envio", "Situação geral"];
+      : ["Coleção", "Ano", "Material", "Data de envio à gráfica", "Responsável pelo envio"];
     if (!lista.length) return `<div class="lista-vazia">${this.e(vazio)}</div>`;
     return `
       <div class="tabela__rolagem lista-indicador__rolagem" tabindex="0" role="region" aria-label="${this.e(rotulo)}">
-        <table class="tabela tabela--compacta">
+        <table class="tabela tabela--compacta${tipo === "grafica" ? " tabela-enviados" : ""}">
           <thead><tr>${colunas.map((c) => `<th scope="col">${c}</th>`).join("")}</tr></thead>
           <tbody>${lista.map((b) => this.linhaIndicador(b, tipo)).join("")}</tbody>
         </table>
       </div>`;
   },
 
+  escopoLista() {
+    const consolidado = Boolean(this.listaConsolidada);
+    const filtros = consolidado ? this.filtrosVisao : this.filtros;
+    const nomes = { colecao: "Coleção", ano: "Ano", tipo: "Tipo", situacao: "Situação", entrega: "Entrega", modulo: "Módulo" };
+    return {
+      secao: consolidado ? "Visão Geral" : CiclosEntrega.nomeCiclo(this.entrega),
+      filtros: Object.entries(filtros).filter(([, v]) => v.length).map(([k, v]) => ({ k, rotulo: nomes[k], valores: v.map((x) => this.rotuloOpcao(k, x)).join(", ") }))
+    };
+  },
+
+  async salvarEnviados(botao) {
+    if (!botao || botao.disabled) return;
+    const { confirmados } = this.materiaisDoIndicador("grafica");
+    if (!confirmados.length) return;
+    const escopo = this.escopoLista();
+    const dados = {
+      secao: escopo.secao,
+      filtros: escopo.filtros.map((f) => `${f.rotulo}: ${f.valores}`),
+      materiais: confirmados.map((b) => ({
+        id: b.id,
+        chaveColecao: Materiais.semAcento(b.colecao),
+        colecao: b.colecao,
+        ano: b.ano,
+        nome: b.nome,
+        data: this.textoValores(b, "dataEnvioGrafica"),
+        responsavel: this.textoValores(b, "envioGrafica")
+      }))
+    };
+    botao.disabled = true;
+    botao.setAttribute("aria-busy", "true");
+    try {
+      const data = new Date();
+      await RelatorioPdf.baixarEnviados(dados, data, RelatorioPdf.nomeArquivo({ tipo: "livrosEnviados", escopo: this.listaConsolidada ? "visao" : "entregas", entrega: this.entrega, data }));
+    } finally {
+      botao.disabled = false;
+      botao.removeAttribute("aria-busy");
+    }
+  },
+
   descricaoFiltros() {
+    if (this.listaConsolidada) {
+      const escopo = this.escopoLista();
+      return `<span class="tag tag--primaria">Visão Geral</span>${escopo.filtros.map((f) => `<span class="tag">${this.e(f.rotulo)}: ${this.e(f.valores)}</span>`).join("")}`;
+    }
     const nomes = { colecao: "Coleção", ano: "Ano", tipo: "Tipo", situacao: "Situação" };
     const ativos = Object.entries(this.filtros).filter(([, v]) => v.length).map(([k, v]) =>
       `<span class="tag">${nomes[k]}: ${this.e(v.map((x) => this.rotuloOpcao(k, x)).join(", "))}</span>`);
@@ -1434,7 +1583,7 @@ const EntregasView = {
         <div>
           <span class="detalhe__eyebrow">Indicador</span>
           <h2 class="detalhe__titulo" id="listaIndicadorTitulo">${this.e(def.titulo)}</h2>
-          <p class="lista-indicador__descricao">${this.e(def.descricao)}</p>
+          ${def.descricao ? `<p class="lista-indicador__descricao">${this.e(def.descricao)}</p>` : ""}
         </div>
         <button type="button" class="detalhe__fechar" data-fechar-lista aria-label="Fechar detalhamento">${ICONES_ENTREGA.fechar}</button>
       </header>
@@ -1446,6 +1595,13 @@ const EntregasView = {
         ${seletor}
         ${this.tabelaIndicador(lista, tipo, def.titulo, vazio)}
         ${blocoProvisorios}
+        ${tipo === "grafica" ? `
+        <footer class="relatorio__rodape lista-indicador__rodape">
+          <button type="button" class="relatorio__acao relatorio__acao--salvar" data-salvar-enviados${confirmados.length ? "" : " disabled"}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 19h14"/></svg>
+            <span>Salvar relatório</span>
+          </button>
+        </footer>` : ""}
       </div>`;
   }
 };

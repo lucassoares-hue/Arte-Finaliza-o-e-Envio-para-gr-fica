@@ -21,6 +21,7 @@ const Analises = {
     em_andamento: "#F97316",
     nao_iniciado: "#64748B",
     inconsistente: "#EF4444",
+    pendente: "#FBBF24",
     entregue: "#22C55E",
     em_producao: "#4F8EF7",
     validacao: "#EAB308"
@@ -486,9 +487,10 @@ const Analises = {
 
   contexto() {
     if (this.consolidado) {
-      const materiais = Dashboard.materiaisConsolidados(EntregasView.proc);
+      const procVisao = EntregasView.procVisao(EntregasView.proc);
+      const materiais = Dashboard.materiaisConsolidados(procVisao);
       const presentes = new Set(materiais.map((b) => Materiais.semAcento(b.colecao)));
-      const naoAgrupados = [...new Map(CiclosEntrega.ENTREGAS.flatMap((e) => CiclosEntrega.selecionar(EntregasView.proc, e).naoAgrupados).map((r) => [r.linhaBase, r])).values()];
+      const naoAgrupados = [...new Map(CiclosEntrega.ENTREGAS.flatMap((e) => CiclosEntrega.selecionar(procVisao, e).naoAgrupados).map((r) => [r.linhaBase, r])).values()];
       return {
         materiais,
         confirmados: materiais.filter((b) => !b.provisorio),
@@ -765,7 +767,7 @@ const Analises = {
       blocos: [
         { ...this.blocoAnoPorColecao(base, enviado, anoLocal, (b) => b), titulo: taxa ? "Taxa por ano escolar" : "Enviados por ano escolar" }
       ],
-      nota: taxa ? "Taxa geral = total enviado ÷ total programado × 100 (não é a média das taxas). Representa o envio à gráfica, não a conclusão integral: separatas e gabaritos continuam obrigatórios." : "Envio confirmado pela coluna T (dataEnvioGrafica). Envio à gráfica não significa conclusão integral do material.",
+      nota: taxa ? "Taxa geral = total enviado ÷ total programado × 100 (não é a média das taxas). Representa o envio à gráfica, não a conclusão integral: separatas e gabaritos continuam obrigatórios." : "",
       lista: { tipo: "grafica", rotulo: "Abrir lista de livros enviados" },
       tabelaClasse: "analise-tabela--materiais",
       colunas: ["Coleção", "Ano", "Material", "Envio"],
@@ -892,13 +894,17 @@ const Analises = {
     const daColecao = (b) => !local || Materiais.semAcento(b.colecao) === local;
     if (estado.anoLocal && !todas.some((b) => daColecao(b) && chaveAno(b) === estado.anoLocal)) estado.anoLocal = null;
     const anoLocal = estado.anoLocal || null;
-    if (estado.situacaoLocal && ![STATUS.EM_ANDAMENTO, STATUS.CONCLUIDO].includes(estado.situacaoLocal)) estado.situacaoLocal = null;
+    if (estado.situacaoLocal && ![Pendencias.ESTADO, STATUS.EM_ANDAMENTO, STATUS.CONCLUIDO].includes(estado.situacaoLocal)) estado.situacaoLocal = null;
     const situacaoLocal = estado.situacaoLocal || null;
     const doRecorte = (b) => daColecao(b) && (!anoLocal || chaveAno(b) === anoLocal);
     const base = todas.filter(doRecorte);
-    const materiaisTabela = situacaoLocal ? base.filter((b) => estadoDe(b) === situacaoLocal) : base;
-    const rotulos = { nao_iniciado: "Não iniciado", em_andamento: "Em andamento", concluido: "Concluído", inconsistente: "Inconsistente" };
-    const contagem = this.contar(base, estadoDe);
+    const estadoVisual = (b) => Pendencias.etapa(b, "montagem").estado;
+    const materiaisTabela = situacaoLocal ? base.filter((b) => estadoVisual(b) === situacaoLocal) : base;
+    const rotulos = { nao_iniciado: "Não iniciado", pendente: "Pendentes", em_andamento: "Em andamento", concluido: "Concluído", inconsistente: "Inconsistente" };
+    const rotulosEstado = { ...rotulos, pendente: "Pendente" };
+    const contagem = this.contar(base, estadoVisual);
+    const nPendentes = base.filter((b) => estadoVisual(b) === Pendencias.ESTADO).length;
+    const textoSituacao = { concluido: "concluída", em_andamento: "em andamento", pendente: "pendente" };
     const estados = ["nao_iniciado", "em_andamento", "concluido", "inconsistente"].map((s) => ({ id: s, rotulo: rotulos[s], valor: contagem.get(s) || 0 }))
       .filter((s) => s.valor || s.id !== "inconsistente");
     const concluidos = contagem.get(STATUS.CONCLUIDO) || 0;
@@ -910,7 +916,7 @@ const Analises = {
       ...(anoLocal ? [{ tipo: "ano", rotulo: colecaoLocal ? `${anoNome} ano` : `${anoNome} ano · ${anoColecao}` }] : []),
       ...(situacaoLocal ? [{ tipo: "situacao", rotulo: rotulos[situacaoLocal] }] : [])
     ];
-    const resumoSituacao = situacaoLocal ? ` · ${this.n(materiaisTabela.length)} ${materiaisTabela.length === 1 ? "material" : "materiais"} com montagem ${situacaoLocal === STATUS.CONCLUIDO ? "concluída" : "em andamento"}` : "";
+    const resumoSituacao = situacaoLocal ? ` · ${this.n(materiaisTabela.length)} ${materiaisTabela.length === 1 ? "material" : "materiais"} com montagem ${textoSituacao[situacaoLocal]}` : "";
     return {
       titulo: etapa.nome,
       unidade: "materiais",
@@ -926,7 +932,8 @@ const Analises = {
       },
       resumo: [
         this.q("Total de materiais", base.length),
-        ...estados.filter((s) => s.id !== "inconsistente").map((s) => this.q(s.rotulo, s.valor, [STATUS.EM_ANDAMENTO, STATUS.CONCLUIDO].includes(s.id) ? { estado: s.id, filtro: s.id, ativo: situacaoLocal === s.id } : { estado: s.id })),
+        ...estados.filter((s) => s.id !== "inconsistente").map((s) => this.q(s.rotulo, s.valor, [STATUS.EM_ANDAMENTO, STATUS.CONCLUIDO].includes(s.id) ? { estado: s.id, filtro: s.id, ativo: situacaoLocal === s.id, unidade: "materiais" } : { estado: s.id })),
+        this.q("Pendentes", nPendentes, { estado: Pendencias.ESTADO, filtro: Pendencias.ESTADO, ativo: situacaoLocal === Pendencias.ESTADO, unidade: "materiais" }),
         this.t("Percentual de conclusão", concluidos, base.length, { destaque: true })
       ],
       pilha: { titulo: "Situação da etapa", itens: estados, total: base.length },
@@ -937,7 +944,7 @@ const Analises = {
       ],
       nota: null,
       lista: null,
-      unidadeTabela: situacaoLocal ? `materiais com montagem ${situacaoLocal === STATUS.CONCLUIDO ? "concluída" : "em andamento"}` : "materiais",
+      unidadeTabela: situacaoLocal ? `materiais com montagem ${textoSituacao[situacaoLocal]}` : "materiais",
       tabelaClasse: "analise-tabela--materiais",
       colunas: ["Coleção", "Ano", "Material"],
       linhas: materiaisTabela.map((b) => ({
@@ -945,9 +952,9 @@ const Analises = {
         celulas: [
           { html: this.celulaColecao(b.colecao), chave: b.colecao },
           { html: this.e(`${b.ano} ano`), chave: Number(Materiais.canonAno(b.ano)) },
-          { html: this.celulaMaterialEtapa(b, estadoDe(b), rotulos), chave: b.nome }
+          { html: this.celulaMaterialEtapa(b, estadoVisual(b), rotulosEstado), chave: b.nome }
         ],
-        busca: this.normalizar([b.colecao, b.ano, `${b.ano} ano`, b.nome, rotulos[estadoDe(b)]].join(" "))
+        busca: this.normalizar([b.colecao, b.ano, `${b.ano} ano`, b.nome, rotulosEstado[estadoVisual(b)]].join(" "))
       })),
       recortes: situacaoLocal ? [] : estados.filter((s) => s.valor).map((s) => ({ id: s.id, rotulo: `${s.rotulo} (${this.n(s.valor)})` })),
       provisorios: ctx.provisorios.filter(doRecorte),
@@ -1023,7 +1030,8 @@ const Analises = {
     const todas = ctx.confirmados;
     const estadoDe = (b) => b.etapas[id].status;
     const concluido = (b) => estadoDe(b) === STATUS.CONCLUIDO;
-    const filtraveis = intervalo ? [STATUS.NAO_INICIADO, STATUS.EM_ANDAMENTO, STATUS.CONCLUIDO] : [STATUS.CONCLUIDO, STATUS.NAO_INICIADO];
+    const filtraveis = intervalo ? [STATUS.NAO_INICIADO, Pendencias.ESTADO, STATUS.EM_ANDAMENTO, STATUS.CONCLUIDO] : [STATUS.CONCLUIDO, Pendencias.ESTADO, STATUS.NAO_INICIADO];
+    const estadoVisual = (b) => Pendencias.etapa(b, id).estado;
     const chaveAno = (b) => `${Materiais.semAcento(b.colecao)}|${b.ano}`;
     const estado = this.estado || {};
     const disponiveis = ctx.colecoes.filter((c) => todas.some((b) => Materiais.semAcento(b.colecao) === c.chave)).map((c) => c.chave);
@@ -1036,9 +1044,10 @@ const Analises = {
     const situacaoLocal = estado.situacaoLocal || null;
     const doRecorte = (b) => daColecao(b) && (!anoLocal || chaveAno(b) === anoLocal);
     const base = todas.filter(doRecorte);
-    const materiaisTabela = situacaoLocal ? base.filter((b) => estadoDe(b) === situacaoLocal) : base;
-    const rotulos = cfg.rotulos;
-    const contagem = this.contar(base, estadoDe);
+    const materiaisTabela = situacaoLocal ? base.filter((b) => estadoVisual(b) === situacaoLocal) : base;
+    const rotulos = { ...cfg.rotulos, pendente: "Pendentes" };
+    const rotulosEstado = { ...cfg.estado, pendente: "Pendente" };
+    const contagem = this.contar(base, estadoVisual);
     const concluidos = contagem.get(STATUS.CONCLUIDO) || 0;
     const inconsistentes = contagem.get(STATUS.INCONSISTENTE) || 0;
     const avisos = inconsistentes ? [`${this.n(inconsistentes)} ${inconsistentes === 1 ? "material tem" : "materiais têm"} registros inconsistentes nesta etapa e não ${inconsistentes === 1 ? "é contado" : "são contados"} como ${rotulos.concluido.toLowerCase()}. Consulte o detalhe do material.`] : [];
@@ -1086,9 +1095,9 @@ const Analises = {
         celulas: [
           { html: this.celulaColecao(b.colecao), chave: b.colecao },
           { html: this.e(`${b.ano} ano`), chave: Number(Materiais.canonAno(b.ano)) },
-          { html: this.celulaMaterialSituacao(b, estadoDe(b), cfg.estado[estadoDe(b)], cfg.titulo), chave: b.nome }
+          { html: this.celulaMaterialSituacao(b, estadoVisual(b), rotulosEstado[estadoVisual(b)], cfg.titulo), chave: b.nome }
         ],
-        busca: this.normalizar([b.colecao, b.ano, `${b.ano} ano`, b.nome, cfg.estado[estadoDe(b)]].join(" "))
+        busca: this.normalizar([b.colecao, b.ano, `${b.ano} ano`, b.nome, rotulosEstado[estadoVisual(b)]].join(" "))
       })),
       recortes: [],
       provisorios: ctx.provisorios.filter(doRecorte),
@@ -1103,7 +1112,8 @@ const Analises = {
     const filtros = {
       solicitadas: { rotulo: "Solicitadas", teste: solicitada, unidade: "materiais com solicitação confirmada" },
       recebidas: { rotulo: "Recebidas", teste: (b) => recebida(b) && solicitada(b), unidade: "materiais com boneca recebida" },
-      aguardando: { rotulo: "Aguardando recebimento", teste: (b) => solicitada(b) && !recebida(b), unidade: "materiais aguardando recebimento" }
+      aguardando: { rotulo: "Recebimento pendente", teste: (b) => Pendencias.pendente(b, "bonecaRecebida"), unidade: "materiais com recebimento pendente" },
+      pendSolicitacao: { rotulo: "Solicitação pendente", teste: (b) => Pendencias.pendente(b, "bonecaSolicitada"), unidade: "materiais com solicitação pendente" }
     };
     const chaveAno = (b) => `${Materiais.semAcento(b.colecao)}|${b.ano}`;
     const estado = this.estado || {};
@@ -1155,7 +1165,8 @@ const Analises = {
         this.q("Total de materiais", base.length),
         cardFiltro("solicitadas", nSolicitadas, STATUS.EM_ANDAMENTO),
         cardFiltro("recebidas", nRecebidas, STATUS.CONCLUIDO),
-        cardFiltro("aguardando", nAguardando, STATUS.NAO_INICIADO),
+        cardFiltro("pendSolicitacao", base.filter(filtros.pendSolicitacao.teste).length, Pendencias.ESTADO),
+        cardFiltro("aguardando", base.filter(filtros.aguardando.teste).length, Pendencias.ESTADO),
         this.t("Percentual de recebimento", nRecebidas, base.length, { destaque: true })
       ],
       pilha: null,
@@ -1203,6 +1214,10 @@ const Analises = {
     const situacaoLocal = this.estado ? this.estado.situacaoLocal : null;
     const doAno = (colecao, ano) => !anoLocal || chaveAno(colecao, ano) === anoLocal;
     const frentes = frentesColecao.filter((f) => doAno(f.material.colecao, f.material.ano));
+    const pendDados = Pendencias.dados(EntregasView.proc);
+    const pendDisponivel = Boolean(pendDados && pendDados.disponivel);
+    frentes.forEach((f) => { f.pendente = pendDisponivel && Pendencias.frente(f.registro, f.status).estado === Pendencias.ESTADO; });
+    if (situacaoLocal === Pendencias.ESTADO && !pendDisponivel && this.estado) this.estado.situacaoLocal = null;
     const naoAgrupados = ctx.naoAgrupados.filter((r) => daColecao(r.colecao) && doAno(r.colecao, r.ano));
     const progressoMaterial = new Map();
     frentes.forEach((f) => {
@@ -1210,12 +1225,14 @@ const Analises = {
       p.total += 1;
       if (f.status === STATUS.CONCLUIDO) p.concluidas += 1;
       if (f.status === STATUS.EM_ANDAMENTO) p.emAndamento += 1;
+      if (f.pendente) (p.pendentes = p.pendentes || []).push(f.registro);
       progressoMaterial.set(f.material.id, p);
     });
-    const materiaisTabela = ctx.confirmados.filter((b) => daColecao(b.colecao) && doAno(b.colecao, b.ano) && (!situacaoLocal || ((progressoMaterial.get(b.id) || {}).emAndamento || 0) > 0));
+    const materiaisTabela = ctx.confirmados.filter((b) => daColecao(b.colecao) && doAno(b.colecao, b.ano) && (!situacaoLocal || (situacaoLocal === Pendencias.ESTADO ? ((progressoMaterial.get(b.id) || {}).pendentes || []).length > 0 : ((progressoMaterial.get(b.id) || {}).emAndamento || 0) > 0)));
+    const nPendentesCk = frentes.filter((f) => f.pendente).length;
     const rotulos = { nao_iniciado: "Não iniciado", em_andamento: "Em andamento", concluido: "Concluído", inconsistente: "Inconsistente" };
     const plurais = { nao_iniciado: "Não iniciadas", em_andamento: "Em andamento", concluido: "Concluídas", inconsistente: "Inconsistentes" };
-    const contagem = this.contar(frentes, (f) => f.status);
+    const contagem = this.contar(frentes, (f) => (f.pendente ? Pendencias.ESTADO : f.status));
     const estados = ["nao_iniciado", "em_andamento", "concluido", "inconsistente"].map((s) => ({ id: s, rotulo: rotulos[s], valor: contagem.get(s) || 0 }));
     const concluidos = contagem.get(STATUS.CONCLUIDO) || 0;
     const concluida = (f) => f.status === STATUS.CONCLUIDO;
@@ -1226,11 +1243,11 @@ const Analises = {
     const filtrosLocais = [
       ...(colecaoLocal ? [{ tipo: "colecao", rotulo: colecaoLocal.nome }] : []),
       ...(anoLocal ? [{ tipo: "ano", rotulo: colecaoLocal ? `${anoNome} ano` : `${anoNome} ano · ${anoColecao}` }] : []),
-      ...(situacaoLocal ? [{ tipo: "situacao", rotulo: "Em andamento" }] : [])
+      ...(situacaoLocal ? [{ tipo: "situacao", rotulo: situacaoLocal === Pendencias.ESTADO ? "Pendentes" : "Em andamento" }] : [])
     ];
     const resumoFiltros = [
       `Recorte: ${this.n(frentes.length)} de ${this.n(todas.length)} frentes da análise`,
-      ...(situacaoLocal ? [`${this.n(emAndamento)} em andamento em ${this.n(materiaisTabela.length)} ${materiaisTabela.length === 1 ? "material" : "materiais"}`] : [])
+      ...(situacaoLocal ? [`${this.n(situacaoLocal === Pendencias.ESTADO ? nPendentesCk : emAndamento)} ${situacaoLocal === Pendencias.ESTADO ? "pendentes" : "em andamento"} em ${this.n(materiaisTabela.length)} ${materiaisTabela.length === 1 ? "material" : "materiais"}`] : [])
     ].join(" · ");
     return {
       titulo: ETAPA_CHECKLIST.nome,
@@ -1246,6 +1263,7 @@ const Analises = {
       resumo: [
         this.q("Total de frentes", frentes.length),
         ...estados.filter((s) => s.id !== "inconsistente").map((s) => this.q(plurais[s.id], s.valor, s.id === STATUS.EM_ANDAMENTO ? { estado: s.id, filtro: STATUS.EM_ANDAMENTO, ativo: situacaoLocal === STATUS.EM_ANDAMENTO } : { estado: s.id })),
+        ...(pendDisponivel ? [this.q("Pendentes", nPendentesCk, { estado: Pendencias.ESTADO, filtro: Pendencias.ESTADO, ativo: situacaoLocal === Pendencias.ESTADO })] : []),
         this.t("Percentual de conclusão", concluidos, frentes.length, { destaque: true })
       ],
       pilha: { titulo: "Situação das frentes", itens: estados, total: frentes.length },
@@ -1259,7 +1277,7 @@ const Analises = {
       sobretitulo: "Análise · frentes",
       nota: null,
       lista: null,
-      unidadeTabela: situacaoLocal ? "materiais com frentes em andamento" : "materiais",
+      unidadeTabela: situacaoLocal ? (situacaoLocal === Pendencias.ESTADO ? "materiais com frentes pendentes" : "materiais com frentes em andamento") : "materiais",
       tabelaClasse: "analise-tabela--materiais",
       colunas: ["Coleção", "Ano", "Material"],
       linhas: materiaisTabela.map((b) => ({
@@ -1267,14 +1285,23 @@ const Analises = {
         celulas: [
           { html: this.celulaColecao(b.colecao), chave: b.colecao },
           { html: this.e(`${b.ano} ano`), chave: Number(Materiais.canonAno(b.ano)) },
-          { html: this.celulaMaterialProgresso(b, progressoMaterial.get(b.id), Boolean(situacaoLocal)), chave: b.nome }
+          { html: this.celulaMaterialProgresso(b, progressoMaterial.get(b.id), situacaoLocal === STATUS.EM_ANDAMENTO) + (situacaoLocal === Pendencias.ESTADO ? this.listaFrentesPendentes((progressoMaterial.get(b.id) || {}).pendentes || []) : ""), chave: b.nome }
         ],
         busca: this.normalizar([b.colecao, b.ano, `${b.ano} ano`, b.nome].join(" "))
       })),
       recortes: [],
       provisorios: ctx.provisorios.filter((b) => daColecao(b.colecao) && doAno(b.colecao, b.ano)),
-      avisos: naoAgrupados.length ? [`${this.n(naoAgrupados.length)} frentes deste recorte ainda não pertencem a um material e não entram nesta análise.`] : []
+      avisos: [
+        ...(naoAgrupados.length ? [`${this.n(naoAgrupados.length)} frentes deste recorte ainda não pertencem a um material e não entram nesta análise.`] : []),
+        ...(pendDisponivel ? [] : ["Pendências do checklist indisponíveis: a API não informou o campo statusMaterial (coluna Y — STATUS DO MATERIAL)."])
+      ]
     };
+  },
+
+  listaFrentesPendentes(registros) {
+    if (!registros.length) return "";
+    const itens = registros.map((r) => `<li>${this.e(r.campos.frente)}${Processamento.preenchido(r.campos.responsavel) ? ` <span>· ${this.e(r.campos.responsavel)}</span>` : ""}</li>`).join("");
+    return `<ul class="analise-frentes-pendentes" aria-label="Frentes pendentes">${itens}</ul>`;
   },
 
   numero(item, classe) {

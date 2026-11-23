@@ -1,4 +1,6 @@
 const Api = {
+  camposAdicionais: Object.freeze([]),
+
   estaConfigurada() {
     return typeof CONFIG.API_URL === "string" && CONFIG.API_URL.trim() !== "";
   },
@@ -70,6 +72,7 @@ const Api = {
     }
 
     const registros = json.dados.filter((item) => item && typeof item === "object");
+    this.camposAdicionais = Object.freeze(Array.isArray(json.camposAdicionais) ? json.camposAdicionais.slice() : []);
 
     if (registros.length > 0) {
       const validacao = this.validarCampos(registros);

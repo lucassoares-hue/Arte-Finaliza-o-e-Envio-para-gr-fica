@@ -176,6 +176,7 @@ const App = {
 
   configurarNavegacao() {
     EntregasView.init();
+    CentralPendencias.init();
 
     Utils.qsa(".sidebar__link").forEach((link) => {
       link.addEventListener("click", (evento) => {
@@ -212,6 +213,7 @@ const App = {
   },
 
   mostrarSecao(nome, entrega = "") {
+    EntregasView.definirEscopo(nome);
     Utils.qsa(".section").forEach((secao) => {
       secao.classList.toggle("is-active", secao.dataset.section === nome);
     });
@@ -220,7 +222,6 @@ const App = {
     } else {
       Utils.qs("#topbarTitulo").textContent = nome === "visao-geral" ? "Visão Geral" : "Entregas e Produtividade";
     }
-    EntregasView.exibirAreaFiltros(nome === "entregas");
     const entregaAtiva = nome === "entregas" ? String(entrega || 1) : "";
     Utils.qs("#toggleEntregas").classList.toggle("has-ativo", Boolean(entregaAtiva));
     Utils.qs("#grupoEntregasNumero").textContent = entregaAtiva;
@@ -308,6 +309,14 @@ const App = {
     status.title = texto;
   },
 
+  renderizarVisao() {
+    const { processamento, registros, erro } = this.estado;
+    if (erro || !processamento || !registros.length) return;
+    const visao = EntregasView.procVisao(processamento);
+    Indicadores.renderizar(visao);
+    Graficos.renderizar(visao);
+  },
+
   atualizarInterface() {
     const { carregando, erro, registros, atualizadoEm, processamento } = this.estado;
     const loading = Utils.qs("#loadingState");
@@ -323,10 +332,12 @@ const App = {
     dashboard.hidden = Boolean(erro) || !temDados;
     dashboard.setAttribute("aria-busy", String(carregando));
     if (!carregando && !erro) {
-      Indicadores.renderizar(temDados ? processamento : null);
-      Graficos.renderizar(temDados ? processamento : null);
+      const visao = temDados ? EntregasView.procVisao(processamento) : null;
+      Indicadores.renderizar(visao);
+      Graficos.renderizar(visao);
     }
     EntregasView.atualizar(temDados ? processamento : null, { carregando, erro });
+    if (!carregando) CentralPendencias.atualizar();
 
     loading.hidden = !carregando || temDados;
     erroEl.hidden = carregando || !erro;

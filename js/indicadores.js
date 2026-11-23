@@ -59,6 +59,7 @@ const Processamento = {
       linhaBase: campos.linhaBase,
       campos,
       original,
+      camposAdicionais: Object.freeze(registro.camposAdicionais && typeof registro.camposAdicionais === "object" && !Array.isArray(registro.camposAdicionais) ? { ...registro.camposAdicionais } : {}),
       materialId: null,
       camposAusentes
     };
